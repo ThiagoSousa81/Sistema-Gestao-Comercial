@@ -48,8 +48,11 @@ jobs:
           grep -v 'conexao.php' changes.txt > filtered_changes.txt
           cat filtered_changes.txt
         else
-          echo "Um ou ambos os commits não existem no repositório."
-          exit 1
+          echo "Um ou ambos os commits não existem no repositório. Tentando uma abordagem alternativa..."
+          # Tentando uma abordagem alternativa caso os commits não existam
+          git diff --name-only HEAD~1 HEAD -- ${{ env.LOCAL_DIR }} > changes.txt
+          grep -v 'conexao.php' changes.txt > filtered_changes.txt
+          cat filtered_changes.txt
         fi
 
     - name: Install lftp
