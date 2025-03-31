@@ -1,36 +1,50 @@
 # Deploy contínuo de FTP 
 # Pode ser usado normalmente para PHP, HTML, CSS, JavaScript, SVG e todo tipo de arquivo
 
-# Cuidado!!! Ele sobrescreve os arquivos no sevidor remoto!
-
 # Para usar configure os segredos:
 # FTP_SERVER
 # FTP_USERNAME
 # FTP_PASSWORD
 
-# Defina o diretório local que vai subir e onde o remoto vai receber 
-name: CI -> Deploy to My website
+name: Deploy via FTP
+
 on:
   push:
-    branches: [ main ]
+    branches:
+      - main  # Substitua pelo branch que deseja monitorar
 
-  workflow_dispatch:
-  
 jobs:
-  build:
-    runs-on: ubuntu-latest    
+  deploy:
+    runs-on: ubuntu-latest
+
     steps:
-      - name: Debug
-        run: |
-          echo "FTP_SERVER: ${{ secrets.FTP_SERVER }}"
-          echo "FTP_USERNAME: ${{ secrets.FTP_USERNAME }}"
-          echo "FTP_PASSWORD: ${{ secrets.FTP_PASSWORD }}"
-      - uses: actions/checkout@v4
-      - name: Upload from public_html via FTP
-        uses: airvzxf/ftp-deployment-action@latest
-        with:
-          server: ${{ secrets.FTP_SERVER }}
-          user: ${{ secrets.FTP_USERNAME }}
-          password: ${{ secrets.FTP_PASSWORD }}
-          local_dir: "./cursodash"
-          remote_dir: "/sge-test.ebs.great-site.net/htdocs"
+    - name: Checkout repository
+      uses: actions/checkout@v4
+      env:
+        FTP_SERVER: ${{ secrets.FTP_SERVER }}
+        FTP_USERNAME: ${{ secrets.FTP_USERNAME }}
+        FTP_PASSWORD: ${{ secrets.FTP_PASSWORD }}
+        LOCAL_DIR: "./cursodash"  # Defina o diretório local aqui
+        REMOTE_DIR: "/sge-test.ebs.great-site.net/htdocs"  # Defina o diretório remoto aqui
+
+    - name: Get changed files
+      id: changes
+      run: |
+        git fetch --all
+        # Obtém apenas arquivos modificados na pasta especificada (ex: ./cursodash)
+        git diff --name-only ${{ github.event.before }} ${{ github.sha }} -- ${{ env.LOCAL_DIR }} > changes.txt
+        # Exclui conexao.php da lista de arquivos modificados
+        grep -v 'conexao.php' changes.txt > filtered_changes.txt
+        cat filtered_changes.txt
+
+    - name: Install lftp
+      run: sudo apt-get install lftp
+
+    - name: Upload changed files via FTP      
+      run: |
+        while read file; do
+          # Remove o caminho relativo do diretório base
+          base_file=$(echo $file | sed 's|^${{ env.LOCAL_DIR }}/||')
+          # Faz o upload para o diretório remoto especificado
+          lftp -u $FTP_USERNAME,$FTP_PASSWORD $FTP_SERVER -e "put -O $REMOTE_DIR/$base_file $file; bye"
+        done < filtered_changes.txt
